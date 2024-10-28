@@ -1,7 +1,64 @@
 {
-  "packages": [
+  "packages": 
+  [
     {
-	  "websiteURL": "https://www.arduino.cc/en/Reference/HomePage",
+      "name": "BZcard",
+      "maintainer": "Diego Galue",
+      "websiteURL": "http://www.arduino.cc/en/Reference/HomePage",
+      "help": {"online": "http://www.arduino.cc/en/Reference/HomePage"},
+      "platforms": [
+        {
+          "name": "BZcard",
+          "architecture": "samd",
+          "version": "2.0",
+          "category": "Contributed",
+		  "help": {"online": "http://www.arduino.cc/en/Reference/HomePage"},
+          "url": "https://github.com/willow2ko/BZcard/raw/main/BZcard-2.0.zip",
+          "archiveFileName": "BZcard-2.0.zip",
+          "checksum": "SHA-256:34582a372a91c96346201acda18c4a6b1877d7ac11b3ee760549a56eefdf3fd1",
+          "size": "4677282",
+          "boards": [
+		  {"name": "BZcard"}         
+          ],
+          "toolsDependencies": [
+            {
+              "packager": "adafruit",
+              "name": "arm-none-eabi-gcc",
+              "version": "9-2019q4"
+            },
+            {
+              "packager": "arduino",
+              "name": "bossac",
+              "version": "1.7.0-arduino3"
+            },
+            {
+              "packager": "adafruit",
+              "name": "bossac",
+              "version": "1.8.0-48-gb176eee"
+            },
+            {
+              "packager": "arduino",
+              "name": "openocd",
+              "version": "0.11.0-arduino2"
+            },
+            {
+              "packager": "adafruit",
+              "name": "CMSIS",
+              "version": "5.4.0"
+            },
+            {
+              "packager": "adafruit",
+              "name": "CMSIS-Atmel",
+              "version": "1.2.2"
+            },
+            {
+              "packager": "arduino",
+              "name": "arduinoOTA",
+              "version": "1.2.1"
+            }
+			]
+		}
+		],
 	  "tools": [
         {
           "name": "bossac",
@@ -436,68 +493,6 @@
           "version": "1.0.0"
         }
       ],
-      "name": "BZcard",
-	  "help": {
-        "online": "http://www.arduino.cc/en/Reference/HomePage"
-	          },
-      "maintainer": "Diego Galue",
-      "platforms": [
-	    {
-          "name": "BZcard",
-          "architecture": "samd",
-          "version": "2.0",
-          "category": "Contributed",
-          "url": "https://github.com/willow2ko/BZcard/raw/main/BZcard-2.0.zip",
-          "archiveFileName": "BZcard-2.0.zip",
-          "checksum": "SHA-256:9745c78f433097949307977d4dcd2d7b0f5686df5e910c4d391e19a82a44fbdf",
-          "size": "1941766",
-          "help": {
-            "online": "https://www.arduino.cc/en/Reference/HomePage"
-          },
-		  "boards": [
-            {
-			  "name": "BZcard"
-            }
-          ],
-          "toolsDependencies": [
-            {
-              "packager": "adafruit",
-              "name": "arm-none-eabi-gcc",
-              "version": "9-2019q4"
-            },
-            {
-              "packager": "arduino",
-              "name": "bossac",
-              "version": "1.7.0-arduino3"
-            },
-            {
-              "packager": "adafruit",
-              "name": "bossac",
-              "version": "1.8.0-48-gb176eee"
-            },
-            {
-              "packager": "arduino",
-              "name": "openocd",
-              "version": "0.11.0-arduino2"
-            },
-            {
-              "packager": "adafruit",
-              "name": "CMSIS",
-              "version": "5.4.0"
-            },
-            {
-              "packager": "adafruit",
-              "name": "CMSIS-Atmel",
-              "version": "1.2.2"
-            },
-            {
-              "packager": "arduino",
-              "name": "arduinoOTA",
-              "version": "1.2.1"
-            }
-          ]
-		}
-	  ]
 	}
   ]
 }
