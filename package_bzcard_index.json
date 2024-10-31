@@ -15,8 +15,8 @@
 		  "help": {"online": "http://www.arduino.cc/en/Reference/HomePage"},
           "url": "https://github.com/willow2ko/BZcard/raw/main/BZcard-2.0.zip",
           "archiveFileName": "BZcard-2.0.zip",
-          "checksum": "SHA-256:34582a372a91c96346201acda18c4a6b1877d7ac11b3ee760549a56eefdf3fd1",
-          "size": "4677282",
+          "checksum": "SHA-256:9bb066ee68182b1bf4eb079cc8be26e21fcf2d2ff2d32952f72c0e950f29a6ec",
+          "size": "4204125",
           "boards": [
 		  {"name": "BZcard"}         
           ],
