@@ -436,7 +436,7 @@
           "version": "1.0.0"
         }
       ],
-      "name": "BZcard",
+      "name": "Yanagi",
       "email": "info@none.com",
 	  "help": {
         "online": "http://www.arduino.cc/en/Reference/HomePage"
@@ -444,7 +444,7 @@
       "maintainer": "Diego Galue",
       "platforms": [
 	    {
-          "name": "BZcard",
+          "name": "Yanagi SAMD Board",
           "architecture": "samd",
           "version": "2.0",
           "category": "Contributed",
@@ -497,8 +497,8 @@
               "version": "1.2.1"
             }
           ]
+		}
+	  ]
 	}
-      ]
-    }
   ]
 }
