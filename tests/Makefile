@@ -1,8 +1,8 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -I../scr -I./mocks -pthread -include mocks/ArduinoCompat.h
+CXXFLAGS = -std=c++17 -I../BZ_CARD -I./mocks -pthread -include mocks/ArduinoCompat.h
 LDFLAGS = -lgtest -lgtest_main -pthread
 
-SRC = ../scr/StorageManager.cpp test_storagemanager.cpp
+SRC = ../BZ_CARD/StorageManager.cpp test_storagemanager.cpp
 
 
 test_storage: $(SRC)

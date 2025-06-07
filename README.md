@@ -8,7 +8,7 @@ An interactive Arduino business card with an OLED display and capacitive touch c
 - Sleep, wake and charging detection
 - Persistent high score storage
 
-Full documentation lives in [scr/README.md](scr/README.md).
+Full documentation lives in [BZ_CARD/README.md](BZ_CARD/README.md).
 
 ## Running Unit Tests
 
