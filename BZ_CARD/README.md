@@ -3,7 +3,7 @@
 ## 🌟 Project Overview
 This project implements an interactive business card on an Arduino-compatible board with an OLED display and capacitive touch buttons. It features:
 - OLED menu system with multiple sections (Contact, Social, Projects, Games)
-- Two built-in games: Brick Breaker and Snake
+- Four built-in games: Brick Breaker, Snake, Tetris, and Space Invaders
 - Animated logo display
 - Power management (sleep, wake, charging detection)
 - Persistent high score storage
@@ -39,6 +39,8 @@ All files must be in the **same folder** as `BZ_CARD.ino`:
 - `StorageManager.h/cpp` — Persistent storage (high score)
 - `BrickBreaker.h/cpp` — Full Brick Breaker game logic
 - `Snake.h/cpp` — Full Snake game logic
+- `Tetris.h/cpp` — Placeholder Tetris implementation
+- `SpaceInvaders.h/cpp` — Placeholder Space Invaders implementation
 
 ---
 
@@ -60,6 +62,8 @@ All files must be in the **same folder** as `BZ_CARD.ino`:
 - **StorageManager**: Reads/writes persistent high score using FlashStorage.
 - **BrickBreaker**: Implements the full Brick Breaker game (paddle, ball, bricks, scoring, high score).
 - **Snake**: Implements the full Snake game (movement, food, scoring, high score).
+- **Tetris**: Placeholder version of the falling-block classic.
+- **SpaceInvaders**: Placeholder for a simple shooter.
 - **BZ_CARD.ino**: Sets up all modules, defines menu structure, and launches games/logo from the menu.
 
 ---

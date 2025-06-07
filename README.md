@@ -3,7 +3,7 @@ An interactive Arduino business card with an OLED display and capacitive touch c
 
 ## Features
 - Menu-driven interface on a small OLED screen
-- Brick Breaker and Snake games
+- Brick Breaker, Snake, Tetris and Space Invaders games
 - Animated logo display and project info
 - Sleep, wake and charging detection
 - Persistent high score storage
