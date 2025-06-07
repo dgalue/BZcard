@@ -91,10 +91,10 @@ const char* menuTitles[] = {
 const char* contactOptions[] = {"Name", "Title", "Email", "Phone"};
 const char* socialOptions[] = {"GitHub", "LinkedIn", "Twitter", "Website"};
 const char* projectOptions[] = {"BZcard", "Project 2", "Project 3", "More..."};
-const char* gameOptions[] = {"Brick Breaker", "Snake", "Show Logo"};
+const char* gameOptions[] = {"Brick Breaker", "Snake", "Tetris", "Space Invaders", "Show Logo"};
 
 // Number of options in each menu
-const int optionCounts[] = {4, 4, 4, 3};
+const int optionCounts[] = {4, 4, 4, 5};
 
 // '3 (Custom)', 128x30px - Negative version
 const unsigned char bzcard_logo[] PROGMEM = {

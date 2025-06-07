@@ -6,6 +6,8 @@
 #include "StorageManager.h"
 #include "BrickBreaker.h"
 #include "Snake.h"
+#include "Tetris.h"
+#include "SpaceInvaders.h"
 
 // --- State and Menu Variables (from original) ---
 int currentMenu = 0;
@@ -51,9 +53,9 @@ const char* menuTitles[] = {"Contact Info", "Social Media", "Projects", "Games",
 const char* contactOptions[] = {"Name", "Title", "Email", "Phone"};
 const char* socialOptions[] = {"Website", "GitHub", "LinkedIn"};
 const char* projectOptions[] = {"BZcard", "Project 2", "Project 3", "More..."};
-const char* gameOptions[] = {"Brick Breaker", "Snake", "Show Logo"};
+const char* gameOptions[] = {"Brick Breaker", "Snake", "Tetris", "Space Invaders", "Show Logo"};
 const char* optionsOptions[] = {"Brightness", "Display Off", "Sleep Time", "RTC Wake"};
-const int optionCounts[] = {4, 3, 4, 3, 4};  // Updated games count to 3
+const int optionCounts[] = {4, 3, 4, 5, 4};  // Updated games count to 5
 
 // --- Module Instances ---
 DisplayManager displayManager;
@@ -63,6 +65,8 @@ MenuSystem menuSystem(displayManager, inputManager);
 PowerManager powerManager;
 BrickBreaker brickBreaker(displayManager, inputManager, storageManager);
 Snake snake(displayManager, inputManager, storageManager);
+Tetris tetris(displayManager, inputManager, storageManager);
+SpaceInvaders spaceInvaders(displayManager, inputManager, storageManager);
 
 // --- Function Prototypes ---
 void updateMenuDisplay();
@@ -76,7 +80,9 @@ void onMenuSelect(int idx) {
         switch (idx) {
             case 0: brickBreaker.play(); break;
             case 1: snake.play(); break;
-            case 2: displayManager.showLogo(); delay(2000); break;
+            case 2: tetris.play(); break;
+            case 3: spaceInvaders.play(); break;
+            case 4: displayManager.showLogo(); delay(2000); break;
         }
         menuSystem.showMenu();
     } else if (currentMenu == 4) { // Options menu
