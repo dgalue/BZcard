@@ -39,7 +39,7 @@ All files must be in the **same folder** as `BZ_CARD.ino`:
 - `StorageManager.h/cpp` — Persistent storage (high score)
 - `BrickBreaker.h/cpp` — Full Brick Breaker game logic
 - `Snake.h/cpp` — Full Snake game logic
-- `Tetris.h/cpp` — Placeholder Tetris implementation
+- `Tetris.h/cpp` — Simple Tetris game implementation
 - `SpaceInvaders.h/cpp` — Placeholder Space Invaders implementation
 
 ---
@@ -62,7 +62,7 @@ All files must be in the **same folder** as `BZ_CARD.ino`:
 - **StorageManager**: Reads/writes persistent high score using FlashStorage.
 - **BrickBreaker**: Implements the full Brick Breaker game (paddle, ball, bricks, scoring, high score).
 - **Snake**: Implements the full Snake game (movement, food, scoring, high score).
-- **Tetris**: Placeholder version of the falling-block classic.
+- **Tetris**: Simple falling-block game implementation.
 - **SpaceInvaders**: Placeholder for a simple shooter.
 - **BZ_CARD.ino**: Sets up all modules, defines menu structure, and launches games/logo from the menu.
 
