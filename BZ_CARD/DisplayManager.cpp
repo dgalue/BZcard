@@ -233,7 +233,10 @@ void DisplayManager::drawSlotMachineSubmenu(int currentMenu, int currentOption) 
     static const char* projectOptions[] = {"BZcard", "Project 2", "Project 3", "More..."};
     
     // Games submenu
-    static const char* gameOptions[] = {"Brick Breaker", "Snake", "Show Logo"};
+    static const char* gameOptions[] = {
+        "Brick Breaker", "Snake", "Tetris",
+        "Space Invaders", "Show Logo"
+    };
     
     switch (currentMenu) {
         case 0: // Contact Info
@@ -249,8 +252,8 @@ void DisplayManager::drawSlotMachineSubmenu(int currentMenu, int currentOption) 
             optionCount = 4;
             break;
         case 3: // Games
-            options = gameOptions; 
-            optionCount = 3;  // Updated count for 3 options
+            options = gameOptions;
+            optionCount = 5;
             break;
         default:
             options = contactOptions;
