@@ -230,6 +230,9 @@ void loop() {
     }
     
     // CHECK FOR POWER BUTTON TO WAKE DISPLAY (between 1-2 minutes)
+    // This check happens when the display is already off but the device
+    // hasn't yet entered deep sleep (after the display timeout, before the
+    // sleep timeout). It allows the user to wake the screen back up.
     if (!displayOn && !powerManager.isInDeepSleepCycle()) {
         if (inputManager.powerPressed() && millis() - lastPowerWakeTime > 1000) { // 1 second debounce
             Serial.println("Power button pressed - turning display back on");
