@@ -1,6 +1,14 @@
 # BZcard
-nothing to see
-https://github.com/willow2ko/BZcard/raw/main/package_bzcard_index.json
+An interactive Arduino business card with an OLED display and capacitive touch controls.
+
+## Features
+- Menu-driven interface on a small OLED screen
+- Brick Breaker and Snake games
+- Animated logo display and project info
+- Sleep, wake and charging detection
+- Persistent high score storage
+
+Full documentation lives in [scr/README.md](scr/README.md).
 
 ## Running Unit Tests
 
