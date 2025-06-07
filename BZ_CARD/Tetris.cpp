@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include "Tetris.h"
 #include <Arduino.h>
 
@@ -42,6 +43,9 @@ const int8_t PIECES_I[2][2][4] = {
 
 void Tetris::play() {
 codex/fix-interactive-names-and-tetris-logo-issue
+
+codex/fix-interactive-names-and-tetris-logo-issue
+main
     displayManager.u8g2.setPowerSave(0);
 
     bool grid[10][18]{};
@@ -204,6 +208,8 @@ codex/fix-interactive-names-and-tetris-logo-issue
         delay(10);
     }
     while(inputManager.anyButtonPressed()){
+    codex/fix-interactive-names-and-tetris-logo-issue
+
 
     displayManager.u8g2.firstPage();
     do {
@@ -229,6 +235,7 @@ codex/fix-interactive-names-and-tetris-logo-issue
 
     // Wait for release before returning to the menu
     while (inputManager.anyButtonPressed()) {
+    main
         inputManager.update();
         delay(10);
     }
