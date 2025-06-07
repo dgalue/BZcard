@@ -98,4 +98,4 @@ If you want to:
 - Integrate with IoT/cloud
 - Add alerts or notifications
 - Improve graphics or UX
-Just ask for specific code or guidance! 
+Just ask for specific code or guidance!
