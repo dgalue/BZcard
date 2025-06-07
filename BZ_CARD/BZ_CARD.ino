@@ -416,7 +416,9 @@ void handleNormalOperation() {
                     switch (currentOption) {
                         case 0: brickBreaker.play(); break;
                         case 1: snake.play(); break;
-                        case 2: displayManager.showLogo(); delay(2000); break;
+                        case 2: tetris.play(); break;
+                        case 3: spaceInvaders.play(); break;
+                        case 4: displayManager.showLogo(); delay(2000); break;
                     }
                     isMenuActive = false;
                 } else if (currentMenu == 0) { // Contact Info menu
