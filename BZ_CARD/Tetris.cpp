@@ -14,7 +14,20 @@ void Tetris::play() {
         displayManager.u8g2.drawStr(22, 50, "Not implemented");
     } while (displayManager.u8g2.nextPage());
 
+    // Wait for the game-launching button to be released
+    while (inputManager.anyButtonPressed()) {
+        inputManager.update();
+        delay(10);
+    }
+
+    // Wait for a new button press to exit the placeholder screen
     while (!inputManager.anyButtonPressed()) {
+        inputManager.update();
+        delay(10);
+    }
+
+    // Wait for release before returning to the menu
+    while (inputManager.anyButtonPressed()) {
         inputManager.update();
         delay(10);
     }
