@@ -1,0 +1,1344 @@
+#include <Arduino.h>
+#include <U8g2lib.h>
+#include <Adafruit_FreeTouch.h>
+#include <RTCZero.h> // For deep sleep functionality
+
+#ifdef U8X8_HAVE_HW_SPI
+  #include <SPI.h>
+#endif
+
+// Use FlashStorage instead of EEPROM for SAMD21 boards
+#include <FlashStorage.h>
+
+// Define flash storage for high score
+FlashStorage(highScoreStorage, int);
+
+// Create an rtc object for deep sleep
+RTCZero rtc;
+
+// U8g2 constructor for the SSD1306 OLED using software SPI with your pin configuration:
+// Clock: 8, Data: 7, CS: 12, DC: 10, Reset: 11
+U8G2_SSD1306_128X64_NONAME_1_4W_SW_SPI u8g2(
+  U8G2_R0,  // no rotation
+  8,        // clock pin
+  7,        // data pin
+  12,       // chip select (CS) pin
+  10,       // data/command (DC) pin
+  11        // reset (RES) pin
+);
+
+// Create capacitive sensor objects for the four buttons on the PCB
+// UP, ENTER, DOWN, and ON/OFF buttons
+Adafruit_FreeTouch touchPower = Adafruit_FreeTouch(A0, OVERSAMPLE_4, RESISTOR_50K, FREQ_MODE_NONE); // On/Off
+Adafruit_FreeTouch touchEnter = Adafruit_FreeTouch(A1, OVERSAMPLE_4, RESISTOR_50K, FREQ_MODE_NONE); // Enter/Return
+Adafruit_FreeTouch touchUp = Adafruit_FreeTouch(A2, OVERSAMPLE_4, RESISTOR_50K, FREQ_MODE_NONE);    // Menu Up
+Adafruit_FreeTouch touchDown = Adafruit_FreeTouch(A3, OVERSAMPLE_4, RESISTOR_50K, FREQ_MODE_NONE);  // Menu Down
+
+// Define threshold values for touch detection
+#define TOUCH_THRESHOLD 500
+
+// Debounce parameters
+#define DEBOUNCE_DELAY 200  // Debounce time in milliseconds
+unsigned long lastButtonTime = 0;  // Last time a button was pressed
+
+// Simple state management - just two modes
+bool displayOn = true;
+bool showingChargingScreen = false;
+
+// USB connection state tracking with debouncing
+bool isCharging = false;
+bool lastChargingState = false;
+unsigned long lastUsbStateChangeTime = 0;
+#define USB_DEBOUNCE_DELAY 500  // Reduced from 1000ms to 500ms for faster response
+
+// Menu state
+int currentMenu = 0;
+int currentOption = 0;
+const int totalMenus = 4;
+bool isMenuActive = false;
+
+// Button state tracking
+bool prevTouchUp = false;
+bool prevTouchEnter = false;
+bool prevTouchDown = false;
+bool prevTouchPower = false;
+
+// Power button timing
+unsigned long powerButtonPressStartTime = 0;
+const unsigned long powerButtonPressThreshold = 3000; // 3 seconds for power on/off
+bool powerButtonBeingHeld = false;
+
+// Activity timing
+unsigned long lastActivityTime = 0;
+const unsigned long displayOffTimeout = 30000;    // 30 seconds
+const unsigned long deepSleepTimeout = 120000;    // 2 minutes
+
+// Wake pin
+const int wakePin = A0; // Power button (now on A0)
+
+// Flag to track if we're waking from deep sleep
+volatile bool wakingFromSleep = false;
+
+// Menu structure
+const char* menuTitles[] = {
+  "Contact Info",
+  "Social Media",
+  "Projects",
+  "Games"
+};
+
+// Menu options for each menu
+const char* contactOptions[] = {"Name", "Title", "Email", "Phone"};
+const char* socialOptions[] = {"GitHub", "LinkedIn", "Twitter", "Website"};
+const char* projectOptions[] = {"BZcard", "Project 2", "Project 3", "More..."};
+const char* gameOptions[] = {"Brick Breaker", "Snake", "Show Logo"};
+
+// Number of options in each menu
+const int optionCounts[] = {4, 4, 4, 3};
+
+// '3 (Custom)', 128x30px - Negative version
+const unsigned char bzcard_logo[] PROGMEM = {
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0xe0, 0x01, 0xe0, 0x01, 0xf8, 0xff, 0xf8, 0xff, 0x7f, 0x00, 0xfe, 0x3f, 0xff, 0xff, 0x8f, 0x07, 
+	0xe0, 0x01, 0xe0, 0x01, 0xfc, 0xff, 0xf8, 0xff, 0x7f, 0x00, 0xff, 0x3f, 0xff, 0xff, 0x8f, 0x07, 
+	0xe0, 0x01, 0xe0, 0x01, 0xfe, 0xff, 0xf8, 0xff, 0x7f, 0x80, 0xff, 0x3f, 0xff, 0xff, 0x8f, 0x07, 
+	0xe0, 0x01, 0xe0, 0x01, 0xff, 0xff, 0xf8, 0xff, 0x7f, 0xc0, 0xff, 0x3f, 0xff, 0xff, 0x8f, 0x07, 
+	0xe0, 0x03, 0xe0, 0x81, 0x1f, 0xf0, 0x78, 0x00, 0x78, 0xe0, 0x03, 0x3e, 0x1f, 0x00, 0x80, 0x07, 
+	0xe0, 0xff, 0xff, 0xc1, 0x0f, 0xf0, 0x78, 0x00, 0x78, 0xf0, 0x01, 0x3e, 0x0f, 0x00, 0x8e, 0x07, 
+	0xc0, 0xff, 0xff, 0xe0, 0x07, 0xf0, 0x78, 0x00, 0x78, 0xf8, 0x00, 0x3e, 0x0f, 0x00, 0x8f, 0x07, 
+	0x80, 0xff, 0x7f, 0xf0, 0x03, 0xf0, 0x78, 0x00, 0x78, 0x7c, 0x00, 0x3e, 0x0f, 0x00, 0x8f, 0x07, 
+	0x00, 0xff, 0x3f, 0xf0, 0x01, 0xf0, 0x78, 0x00, 0x78, 0x3e, 0x00, 0x3e, 0x0f, 0x00, 0x8f, 0x07, 
+	0x00, 0xfe, 0x1f, 0xf0, 0x00, 0xf0, 0x78, 0x00, 0x78, 0x3e, 0x00, 0x3e, 0x0f, 0x00, 0x8f, 0x07, 
+	0x00, 0xe0, 0x01, 0xf0, 0x00, 0xf0, 0x78, 0x00, 0x78, 0x3e, 0x00, 0x3e, 0x0f, 0x00, 0x8f, 0x07, 
+	0x00, 0xe0, 0x01, 0xf0, 0x00, 0xf0, 0x78, 0x00, 0x78, 0x3e, 0x00, 0x3e, 0xff, 0xff, 0x8f, 0x07, 
+	0x00, 0xe0, 0x01, 0xf0, 0x00, 0xf0, 0x78, 0x00, 0x78, 0x3e, 0x00, 0x3e, 0xff, 0xff, 0x8f, 0x07, 
+	0x00, 0xe0, 0x01, 0xf0, 0x00, 0xf0, 0x78, 0x00, 0x78, 0x3e, 0x00, 0x3e, 0xff, 0xff, 0x8f, 0x07, 
+	0x00, 0xe0, 0x01, 0xf0, 0x00, 0xf0, 0x78, 0x00, 0x78, 0x3e, 0x00, 0x3e, 0xff, 0xff, 0x8f, 0x07, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x07, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+// Function prototypes
+void updateMenuDisplay();
+void showChargingScreen();
+void enterDeepSleep();
+void checkForUSB();
+void wakeupInterrupt();
+void dummy();
+void showLogo();
+void playBrickBreaker();
+void playSnake();
+int getHighScore();
+void saveHighScore(int score);
+void printLogoAsAscii();
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);  // Give serial time to initialize
+  Serial.println("BZcard starting up...");
+  
+  // Initialize the RTC for deep sleep functionality
+  rtc.begin();
+  
+  // Configure the wake pin as input with pull-up
+  pinMode(wakePin, INPUT_PULLUP);
+  
+  // Initialize USB state
+  isCharging = USBDevice.connected();
+  lastChargingState = isCharging;
+  Serial.print("Initial USB state: ");
+  Serial.println(isCharging ? "CONNECTED" : "DISCONNECTED");
+  
+  // Initialize the display
+  u8g2.begin();
+  u8g2.setFont(u8g2_font_ncenB08_tr);
+  
+  // Initialize capacitive sensors; if any fail, print an error.
+  if (!touchPower.begin() || !touchEnter.begin() || !touchUp.begin() || !touchDown.begin()) {
+    Serial.println("Capacitive sensor initialization failed!");
+    while(1);
+  }
+  
+  Serial.println("BZcard initialized successfully!");
+  lastActivityTime = millis();
+  
+  // Initialize Flash storage for high score
+  if (getHighScore() == -1) {
+    // First time running, initialize high score to 0
+    saveHighScore(0);
+  }
+  
+  // Print logo as ASCII art to serial monitor for visualization
+  printLogoAsAscii();
+  
+  // Show logo at startup
+  showLogo();
+  delay(3000);  // Show logo for 3 seconds
+  
+  // Show the menu
+  displayOn = true;
+  showingChargingScreen = false;
+  u8g2.setPowerSave(0); // Explicitly ensure display is on at startup
+  updateMenuDisplay();
+  Serial.println("Initial display state: ON, showing menu");
+  
+  // Print timeout settings
+  Serial.print("Display off timeout: ");
+  Serial.print(displayOffTimeout / 1000);
+  Serial.println(" seconds");
+  Serial.print("Deep sleep timeout: ");
+  Serial.print(deepSleepTimeout / 1000);
+  Serial.println(" seconds");
+}
+
+void loop() {
+  // Check if USB is connected with debouncing
+  bool currentUsbState = USBDevice.connected();
+  
+  // Only update charging state if it's been stable for the debounce period
+  if (currentUsbState != lastChargingState) {
+    // State changed, start debounce timer
+    if (millis() - lastUsbStateChangeTime > USB_DEBOUNCE_DELAY) {
+      lastUsbStateChangeTime = millis();
+      lastChargingState = currentUsbState;
+      
+      if (currentUsbState != isCharging) {
+        isCharging = currentUsbState;
+        Serial.print("USB connection state changed to: ");
+        Serial.println(isCharging ? "CONNECTED" : "DISCONNECTED");
+        
+        // Handle USB connection/disconnection
+        if (!isCharging && showingChargingScreen) {
+          // USB disconnected while showing charging screen
+          Serial.println("STATE CHANGE: USB disconnected, exiting charging screen");
+          displayOn = true;
+          showingChargingScreen = false;
+          lastActivityTime = millis(); // Reset activity timer on USB disconnect
+          updateMenuDisplay();
+        } else if (isCharging && !displayOn) {
+          // USB connected while display is off
+          Serial.println("USB connected while display off, showing charging screen");
+          displayOn = true;
+          showingChargingScreen = true;
+          showChargingScreen();
+        } else if (isCharging) {
+          // USB connected while display is on
+          showingChargingScreen = true;
+          showChargingScreen();
+        }
+      }
+    }
+  } else {
+    // State stable, reset timer
+    lastUsbStateChangeTime = millis();
+  }
+  
+  // Measure touch inputs
+  uint16_t valPower = touchPower.measure();
+  uint16_t valUp = touchUp.measure();
+  uint16_t valEnter = touchEnter.measure();
+  uint16_t valDown = touchDown.measure();
+  
+  // Convert to boolean values with hysteresis for stability
+  bool touchPowerPressed = valPower > TOUCH_THRESHOLD;
+  bool touchUpPressed = valUp > TOUCH_THRESHOLD;
+  bool touchEnterPressed = valEnter > TOUCH_THRESHOLD;
+  bool touchDownPressed = valDown > TOUCH_THRESHOLD;
+  
+  // Handle power button with debouncing
+  if (touchPowerPressed && !prevTouchPower) {
+    // Only process button press if debounce time has passed
+    if (millis() - lastButtonTime > DEBOUNCE_DELAY) {
+      lastButtonTime = millis();
+      
+      // Power button just pressed - start timer
+      powerButtonPressStartTime = millis();
+      powerButtonBeingHeld = true;
+      Serial.println("Power button pressed - starting long press timer");
+    }
+  } else if (touchPowerPressed && powerButtonBeingHeld) {
+    // Check for long press
+    if (millis() - powerButtonPressStartTime >= powerButtonPressThreshold) {
+      // Only process if we haven't already handled this long press
+      if (powerButtonBeingHeld) {
+        // Long press detected
+        Serial.println("Power button long press detected!");
+        
+        // Check current device state and USB connection
+        if (displayOn && !showingChargingScreen && isCharging) {
+          // If display is on, not showing charging screen, and USB is connected:
+          // Show charging screen
+          Serial.println("STATE CHANGE: Switching to charging screen (USB connected)");
+          displayOn = true;
+          showingChargingScreen = true;
+          u8g2.setPowerSave(0); // Ensure display is on
+          showChargingScreen();
+        } else if (displayOn && !showingChargingScreen && !isCharging) {
+          // If display is on, not showing charging screen, and on battery:
+          // Go to deep sleep
+          Serial.println("STATE CHANGE: Going to deep sleep (battery mode)");
+          enterDeepSleep();
+        } else if (showingChargingScreen) {
+          // If showing charging screen (which means USB is connected):
+          // Go back to menu
+          Serial.println("STATE CHANGE: Exiting charging screen, showing menu");
+          displayOn = true;
+          showingChargingScreen = false;
+          u8g2.setPowerSave(0); // Ensure display is on
+          updateMenuDisplay();
+        } else if (!displayOn) {
+          // If display is off:
+          // Turn it on and show menu
+          Serial.println("STATE CHANGE: Turning display on from off state");
+          displayOn = true;
+          showingChargingScreen = false;
+          u8g2.begin(); // Re-initialize display to ensure it wakes up properly
+          u8g2.setPowerSave(0); // Turn display on
+          updateMenuDisplay();
+        }
+        
+        // Reset power button state to prevent multiple triggers
+        powerButtonBeingHeld = false;
+        lastButtonTime = millis(); // Update debounce timer
+      }
+    }
+  } else if (!touchPowerPressed && powerButtonBeingHeld) {
+    // Button released before long press threshold
+    Serial.println("Power button released before long press threshold");
+    powerButtonBeingHeld = false;
+  }
+  
+  // Only handle other buttons if display is on and not showing charging screen
+  if (displayOn && !showingChargingScreen) {
+    // Reset activity timer if charging
+    if (isCharging) {
+      lastActivityTime = millis();
+    }
+    
+    // Handle UP button with debouncing
+    if (touchUpPressed && !prevTouchUp && millis() - lastButtonTime > DEBOUNCE_DELAY) {
+      lastButtonTime = millis();
+      
+      if (isMenuActive) {
+        // In menu mode, navigate up
+        if (currentOption > 0) {
+          currentOption--;
+        } else {
+          currentOption = optionCounts[currentMenu] - 1;
+        }
+      } else {
+        // In main mode, go to previous menu
+        if (currentMenu > 0) {
+          currentMenu--;
+        } else {
+          currentMenu = totalMenus - 1;
+        }
+      }
+      updateMenuDisplay();
+      lastActivityTime = millis(); // Reset activity timer
+    }
+    
+    // Handle DOWN button with debouncing
+    if (touchDownPressed && !prevTouchDown && millis() - lastButtonTime > DEBOUNCE_DELAY) {
+      lastButtonTime = millis();
+      
+      if (isMenuActive) {
+        // In menu mode, navigate down
+        if (currentOption < optionCounts[currentMenu] - 1) {
+          currentOption++;
+        } else {
+          currentOption = 0;
+        }
+      } else {
+        // In main mode, go to next menu
+        if (currentMenu < totalMenus - 1) {
+          currentMenu++;
+        } else {
+          currentMenu = 0;
+        }
+      }
+      updateMenuDisplay();
+      lastActivityTime = millis(); // Reset activity timer
+    }
+    
+    // Handle ENTER button with debouncing
+    if (touchEnterPressed && !prevTouchEnter && millis() - lastButtonTime > DEBOUNCE_DELAY) {
+      lastButtonTime = millis();
+      
+      if (isMenuActive) {
+        // If a menu option is selected
+        if (currentMenu == 3) { // Games menu
+          switch (currentOption) {
+            case 0: // Brick Breaker
+              playBrickBreaker();
+              break;
+            case 1: // Snake
+              playSnake();
+              break;
+            case 2: // Show Logo
+              showLogo();
+              break;
+          }
+          isMenuActive = false; // Exit menu mode after game or showing logo
+        } else {
+          isMenuActive = !isMenuActive;
+        }
+      } else {
+        isMenuActive = !isMenuActive;
+      }
+      
+      updateMenuDisplay();
+      lastActivityTime = millis(); // Reset activity timer
+    }
+    
+    // Check for inactivity timeout (only if not charging)
+    if (displayOn && !isCharging && !showingChargingScreen && millis() - lastActivityTime > displayOffTimeout) {
+      // Turn off display
+      Serial.println("STATE CHANGE: Display turned off due to inactivity");
+      Serial.print("Time since activity: ");
+      Serial.print((millis() - lastActivityTime) / 1000);
+      Serial.println(" seconds");
+      
+      displayOn = false;
+      u8g2.setPowerSave(1);
+      
+      // Check for deep sleep timeout
+      if (millis() - lastActivityTime > deepSleepTimeout) {
+        Serial.println("STATE CHANGE: Deep sleep timeout reached");
+        Serial.print("Time since activity: ");
+        Serial.print((millis() - lastActivityTime) / 1000);
+        Serial.println(" seconds");
+        
+        enterDeepSleep();
+      }
+    }
+  } else if (showingChargingScreen && isCharging) {
+    // Only show charging screen if actually charging
+    static unsigned long lastChargingUpdate = 0;
+    if (millis() - lastChargingUpdate > 500) {
+      u8g2.setPowerSave(0); // Ensure display stays on
+      showChargingScreen();
+      lastChargingUpdate = millis();
+    }
+  }
+  
+  // Update previous button states
+  prevTouchPower = touchPowerPressed;
+  prevTouchUp = touchUpPressed;
+  prevTouchEnter = touchEnterPressed;
+  prevTouchDown = touchDownPressed;
+  
+  // Small delay to prevent CPU overuse
+  delay(10);
+}
+
+void updateMenuDisplay() {
+  Serial.println("Updating menu display");
+  u8g2.setPowerSave(0); // Ensure display is on
+  
+  u8g2.firstPage();
+  do {
+    // Draw a decorative border around the entire display
+    u8g2.drawFrame(0, 0, 128, 64);
+    
+    // Draw the menu title at the top with a better font
+    u8g2.setFont(u8g2_font_helvB10_tr);  // More readable, cleaner font
+    
+    // Center the title
+    int titleWidth = u8g2.getStrWidth(menuTitles[currentMenu]);
+    u8g2.setCursor((128 - titleWidth) / 2, 15);
+    u8g2.print(menuTitles[currentMenu]);
+    
+    // Draw a double line under the title for a more professional look
+    u8g2.drawHLine(10, 18, 108);
+    u8g2.drawHLine(10, 20, 108);
+    
+    // Draw small decorative elements at the corners of the menu area
+    u8g2.drawPixel(10, 18);
+    u8g2.drawPixel(117, 18);
+    u8g2.drawPixel(10, 20);
+    u8g2.drawPixel(117, 20);
+    
+    // Get the appropriate options for the current menu
+    const char** options;
+    switch (currentMenu) {
+      case 0: options = contactOptions; break;
+      case 1: options = socialOptions; break;
+      case 2: options = projectOptions; break;
+      case 3: options = gameOptions; break;
+      default: options = contactOptions;
+    }
+    
+    // Display menu options with a better font
+    u8g2.setFont(u8g2_font_helvR08_tr); // Smaller, cleaner font for options
+    
+    // Only display 3 options at a time with improved visual styling
+    int startOption = 0;
+    if (currentOption > 2 && optionCounts[currentMenu] > 3) {
+      startOption = currentOption - 2;
+    }
+    
+    for (int i = 0; i < 3 && (i + startOption) < optionCounts[currentMenu]; i++) {
+      int optionIndex = i + startOption;
+      int yPos = 32 + i*14;
+      
+      // Draw option selection indicators and backgrounds
+      if (optionIndex == currentOption && isMenuActive) {
+        // Draw a rounded selection box
+        u8g2.drawRBox(5, yPos - 9, 118, 12, 2);
+        u8g2.setDrawColor(0); // Inverse mode for selected item
+      } else {
+        // Draw a small indicator arrow for non-selected items
+        u8g2.drawStr(8, yPos, ">");
+      }
+      
+      // Print the menu option text
+      u8g2.setCursor(20, yPos);
+      u8g2.print(options[optionIndex]);
+      u8g2.setDrawColor(1); // Reset to normal drawing mode
+    }
+    
+  } while (u8g2.nextPage());
+}
+
+void showChargingScreen() {
+  Serial.println("Showing charging animation");
+  u8g2.setPowerSave(0); // Ensure display is on
+  
+  u8g2.firstPage();
+  do {
+    u8g2.setFont(u8g2_font_helvB10_tr);
+    u8g2.setCursor(20, 30);
+    u8g2.print("Charging...");
+    
+    // Draw simple battery icon
+    u8g2.drawFrame(45, 40, 30, 15);
+    u8g2.drawBox(75, 45, 3, 5);
+    
+    // Animated charging indicator
+    unsigned long ms = millis() % 3000;
+    int width = map(ms, 0, 3000, 2, 28);
+    u8g2.drawBox(46, 41, width, 13);
+    
+  } while (u8g2.nextPage());
+}
+
+void enterDeepSleep() {
+  // Double-check if charging before entering deep sleep
+  if (USBDevice.connected()) {
+    // If charging, show charging screen instead
+    Serial.println("Not entering deep sleep because device is charging");
+    displayOn = true;
+    showingChargingScreen = true;
+    u8g2.setPowerSave(0); // Ensure display is on
+    showChargingScreen();
+    return;
+  }
+  
+  // Turn off display
+  Serial.println("Entering deep sleep mode (battery operation)");
+  u8g2.setPowerSave(1);
+  displayOn = false;
+  showingChargingScreen = false; // Ensure we're not in charging mode
+  
+  // Reset the waking flag
+  wakingFromSleep = false;
+  
+  // Configure wake-up source - power button with LOW level detection
+  // This means the interrupt triggers when the pin goes LOW (button pressed)
+  pinMode(wakePin, INPUT_PULLUP); // Ensure pin is in pullup mode
+  attachInterrupt(digitalPinToInterrupt(wakePin), wakeupInterrupt, LOW);
+  
+  // Set a timeout to periodically check for USB connection
+  rtc.setTime(0, 0, 0);
+  rtc.setDate(1, 1, 20);  // Fixed: Use 20 instead of 2020 (year is 0-99)
+  rtc.setAlarmTime(0, 0, 5); // Wake up every 5 seconds to check USB
+  rtc.enableAlarm(rtc.MATCH_SS);
+  rtc.attachInterrupt(checkForUSB);
+  
+  Serial.println("Deep sleep with power button and periodic wakeup enabled");
+  Serial.flush(); // Ensure all serial data is sent before sleep
+  
+  // Enter standby mode
+  SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+  
+  // Enter sleep mode - will stay here until woken by interrupt
+  __WFI();
+  
+  // Code resumes here after waking up
+  detachInterrupt(digitalPinToInterrupt(wakePin));
+  rtc.disableAlarm();
+  rtc.detachInterrupt();
+  
+  // Check what woke us up
+  if (wakingFromSleep) {
+    Serial.println("Woke up from deep sleep due to power button press");
+  } else if (USBDevice.connected()) {
+    Serial.println("Woke up from deep sleep due to USB connection");
+    showingChargingScreen = true;
+  } else {
+    Serial.println("Woke up from deep sleep (unknown reason)");
+  }
+  
+  // Turn on display
+  u8g2.begin(); // Re-initialize display to ensure it wakes up properly
+  u8g2.setPowerSave(0);
+  displayOn = true;
+  
+  // Show appropriate screen
+  if (showingChargingScreen && USBDevice.connected()) {
+    showChargingScreen();
+  } else {
+    showingChargingScreen = false;
+    updateMenuDisplay();
+  }
+  
+  // Reset activity timer
+  lastActivityTime = millis();
+}
+
+// Function to check for USB connection during deep sleep
+void checkForUSB() {
+  // This function is called by the RTC alarm interrupt
+  if (USBDevice.connected()) {
+    // If USB is connected, wake up fully
+    Serial.println("USB connected during deep sleep, waking up");
+    isCharging = true;
+    showingChargingScreen = true;
+    
+    // No need to do anything else here, just let the main code continue
+    // after the __WFI() call in enterDeepSleep()
+  } else {
+    // Go back to sleep if no USB
+    SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+    __WFI();
+  }
+}
+
+// Interrupt handler for power button wake-up
+void wakeupInterrupt() {
+  // Set flag to indicate we're waking up due to button press
+  wakingFromSleep = true;
+  
+  // No need to do anything else here, just let the main code continue
+  // after the __WFI() call in enterDeepSleep()
+}
+
+// Empty function for backward compatibility
+void dummy() {
+  // This function does nothing
+  // It's just needed for the interrupt attachment
+}
+
+// Show the logo
+void showLogo() {
+  u8g2.firstPage();
+  do {
+    // Draw the logo bitmap in the center of the display
+    // The display is 128x64, and the logo is 128x30, so center vertically
+    // Adding 5 pixels to move it down a bit from the mathematical center
+    u8g2.drawXBM(0, ((64-30)/2) + 5, 128, 30, bzcard_logo);
+    
+    // For debugging - uncomment to draw a border around the display area
+    // u8g2.drawFrame(0, 0, 128, 64);
+  } while (u8g2.nextPage());
+  
+  // Print the logo as ASCII art to the Serial Monitor for visualization
+  printLogoAsAscii();
+  
+  // Display the logo for 3 seconds
+  delay(3000);
+}
+
+// Get high score from Flash storage
+int getHighScore() {
+  int highScore = highScoreStorage.read();
+  // If it's uninitialized (first time or erased), return 0
+  if (highScore == -1) {
+    return 0;
+  }
+  return highScore;
+}
+
+// Save high score to Flash storage
+void saveHighScore(int score) {
+  highScoreStorage.write(score);
+}
+
+// Brick Breaker game implementation
+void playBrickBreaker() {
+  u8g2.setPowerSave(0); // Ensure display is on
+  
+  // Game variables
+  bool gameRunning = true;
+  unsigned long lastMoveTime = 0;
+  const unsigned long moveDelay = 25; // Even faster update rate (was 30ms)
+  
+  // Paddle variables
+  int paddleWidth = 20;
+  int paddleHeight = 3;
+  int paddleY = 60;
+  int paddleX = 54; // Center of screen (128/2 - paddleWidth/2)
+  
+  // Ball variables
+  float ballX = 64.0;
+  float ballY = 40.0;
+  int ballSize = 2;
+  float ballDX = 1.8; // Faster initial speed (was 1.5)
+  float ballDY = -1.8; // Faster initial speed (was -1.5)
+  float maxBallSpeed = 3.5; // Higher maximum ball speed (was 3.0)
+  
+  // Brick variables
+  const int brickRows = 3;
+  const int brickCols = 5;
+  const int brickWidth = 20;
+  const int brickHeight = 6;
+  const int brickSpacing = 4;
+  const int topMargin = 10;
+  
+  // Create brick array (1 = visible, 0 = destroyed)
+  bool bricks[brickRows][brickCols];
+  
+  // Initialize bricks
+  for (int row = 0; row < brickRows; row++) {
+    for (int col = 0; col < brickCols; col++) {
+      bricks[row][col] = true;
+    }
+  }
+  
+  // Game score and level
+  int score = 0;
+  int lives = 1; // Changed from 3 to 1
+  int level = 1;
+  int highScore = getHighScore();
+  
+  // Initialize game
+  u8g2.firstPage();
+  do {
+    u8g2.setFont(u8g2_font_ncenB10_tr);
+    u8g2.setCursor(15, 30);
+    u8g2.print("BRICK BREAKER");
+    u8g2.setFont(u8g2_font_ncenB08_tr);
+    u8g2.setCursor(15, 45);
+    u8g2.print("Press UP to start");
+    u8g2.setCursor(15, 55);
+    u8g2.print("High Score: ");
+    u8g2.print(highScore);
+  } while (u8g2.nextPage());
+  
+  // Wait for button press to start
+  while (true) {
+    uint16_t valUp = touchUp.measure();
+    if (valUp > TOUCH_THRESHOLD) {
+      break;
+    }
+    delay(10);
+  }
+  
+  // Wait for button release
+  while (true) {
+    uint16_t valUp = touchUp.measure();
+    if (valUp < TOUCH_THRESHOLD) {
+      break;
+    }
+    delay(10);
+  }
+  
+  // Main game loop
+  while (gameRunning) {
+    // Read button inputs
+    uint16_t valUp = touchUp.measure();
+    uint16_t valDown = touchDown.measure();
+    uint16_t valEnter = touchEnter.measure();
+    uint16_t valPower = touchPower.measure();
+    
+    bool upPressed = valUp > TOUCH_THRESHOLD;
+    bool downPressed = valDown > TOUCH_THRESHOLD;
+    bool enterPressed = valEnter > TOUCH_THRESHOLD;
+    bool powerPressed = valPower > TOUCH_THRESHOLD;
+    
+    // Handle game controls
+    if (upPressed) {
+      // Move paddle left
+      paddleX -= 6; // Even faster paddle movement (was 5)
+      if (paddleX < 0) paddleX = 0;
+    }
+    
+    if (downPressed) {
+      // Move paddle right
+      paddleX += 6; // Even faster paddle movement (was 5)
+      if (paddleX > 128 - paddleWidth) paddleX = 128 - paddleWidth;
+    }
+    
+    if (enterPressed) {
+      // Pause/resume game
+    }
+    
+    if (powerPressed) {
+      // Exit game
+      gameRunning = false;
+    }
+    
+    // Update game state
+    if (millis() - lastMoveTime > moveDelay) {
+      lastMoveTime = millis();
+      
+      // Move ball
+      ballX += ballDX;
+      ballY += ballDY;
+      
+      // Ball collision with walls
+      if (ballX <= 0 || ballX >= 128 - ballSize) {
+        ballDX = -ballDX;
+        // Add slight randomness to bounce
+        ballDY += (random(-10, 10) / 100.0);
+      }
+      
+      if (ballY <= 0) {
+        ballDY = -ballDY;
+        // Add slight randomness to bounce
+        ballDX += (random(-10, 10) / 100.0);
+      }
+      
+      // Ball collision with paddle
+      if (ballY >= paddleY - ballSize && ballY <= paddleY + paddleHeight) {
+        if (ballX >= paddleX - ballSize && ballX <= paddleX + paddleWidth) {
+          // Bounce the ball based on where it hit the paddle
+          float hitPosition = (ballX - paddleX) / paddleWidth; // 0.0 to 1.0
+          
+          // Calculate new direction based on hit position
+          // Middle of paddle = straight up, edges = angled
+          float angle = (hitPosition - 0.5) * PI; // -PI/2 to PI/2
+          
+          // Set new velocity based on angle
+          ballDX = sin(angle) * (maxBallSpeed * 0.8);
+          ballDY = -cos(angle) * maxBallSpeed; // Always bounce upward
+          
+          // Increase speed slightly with each paddle hit
+          float currentSpeed = sqrt(ballDX * ballDX + ballDY * ballDY);
+          if (currentSpeed < maxBallSpeed) {
+            float speedFactor = 1.05; // 5% speed increase
+            ballDX *= speedFactor;
+            ballDY *= speedFactor;
+          }
+          
+          // Ensure ball is above paddle
+          ballY = paddleY - ballSize - 1;
+        }
+      }
+      
+      // Ball collision with bricks
+      for (int row = 0; row < brickRows; row++) {
+        for (int col = 0; col < brickCols; col++) {
+          if (bricks[row][col]) {
+            int brickX = col * (brickWidth + brickSpacing) + brickSpacing;
+            int brickY = row * (brickHeight + brickSpacing) + topMargin;
+            
+            // Check if ball collides with brick
+            if (ballX >= brickX - ballSize && ballX <= brickX + brickWidth &&
+                ballY >= brickY - ballSize && ballY <= brickY + brickHeight) {
+              // Destroy brick
+              bricks[row][col] = false;
+              
+              // Determine which side of the brick was hit
+              float overlapLeft = ballX - (brickX - ballSize);
+              float overlapRight = (brickX + brickWidth) - ballX;
+              float overlapTop = ballY - (brickY - ballSize);
+              float overlapBottom = (brickY + brickHeight) - ballY;
+              
+              // Find the smallest overlap
+              float minOverlap = min(min(overlapLeft, overlapRight), min(overlapTop, overlapBottom));
+              
+              // Bounce based on which side was hit
+              if (minOverlap == overlapLeft || minOverlap == overlapRight) {
+                ballDX = -ballDX; // Hit left or right side
+              } else {
+                ballDY = -ballDY; // Hit top or bottom
+              }
+              
+              // Add slight randomness to bounce
+              ballDX += (random(-5, 5) / 100.0);
+              ballDY += (random(-5, 5) / 100.0);
+              
+              // Increase score
+              score += 10 * level;
+              
+              // Check if all bricks are destroyed
+              bool allDestroyed = true;
+              for (int r = 0; r < brickRows; r++) {
+                for (int c = 0; c < brickCols; c++) {
+                  if (bricks[r][c]) {
+                    allDestroyed = false;
+                    break;
+                  }
+                }
+                if (!allDestroyed) break;
+              }
+              
+              // If all bricks destroyed, level up
+              if (allDestroyed) {
+                // Reset bricks
+                for (int r = 0; r < brickRows; r++) {
+                  for (int c = 0; c < brickCols; c++) {
+                    bricks[r][c] = true;
+                  }
+                }
+                
+                // Reset ball position
+                ballX = 64.0;
+                ballY = 40.0;
+                
+                // Increase level and speed
+                level++;
+                maxBallSpeed += 0.5;
+                
+                // Increase score bonus
+                score += 50 * level;
+                
+                // Show level up message
+                u8g2.firstPage();
+                do {
+                  u8g2.setFont(u8g2_font_ncenB10_tr);
+                  u8g2.setCursor(25, 30);
+                  u8g2.print("LEVEL ");
+                  u8g2.print(level);
+                  u8g2.setFont(u8g2_font_ncenB08_tr);
+                  u8g2.setCursor(25, 45);
+                  u8g2.print("Score: ");
+                  u8g2.print(score);
+                } while (u8g2.nextPage());
+                
+                delay(1500);
+              }
+              
+              // Only process one brick collision per frame
+              goto endBrickCollision;
+            }
+          }
+        }
+      }
+      endBrickCollision:
+      
+      // Ball falls off bottom
+      if (ballY >= 64) {
+        // Game over - only one life now
+        // Check if high score
+        if (score > highScore) {
+          highScore = score;
+          saveHighScore(highScore);
+          
+          // Show new high score message
+          u8g2.firstPage();
+          do {
+            u8g2.setFont(u8g2_font_ncenB10_tr);
+            u8g2.setCursor(15, 25);
+            u8g2.print("NEW HIGH SCORE!");
+            u8g2.setFont(u8g2_font_ncenB08_tr);
+            u8g2.setCursor(35, 40);
+            u8g2.print("Score: ");
+            u8g2.print(score);
+          } while (u8g2.nextPage());
+          
+          delay(2000);
+        }
+        
+        // Show game over screen
+        u8g2.firstPage();
+        do {
+          u8g2.setFont(u8g2_font_ncenB10_tr);
+          u8g2.setCursor(25, 25);
+          u8g2.print("GAME OVER");
+          u8g2.setFont(u8g2_font_ncenB08_tr);
+          u8g2.setCursor(25, 40);
+          u8g2.print("Score: ");
+          u8g2.print(score);
+          u8g2.setCursor(25, 50);
+          u8g2.print("High: ");
+          u8g2.print(highScore);
+        } while (u8g2.nextPage());
+        
+        delay(2000);
+        gameRunning = false;
+      }
+      
+      // Cap ball speed
+      float currentSpeed = sqrt(ballDX * ballDX + ballDY * ballDY);
+      if (currentSpeed > maxBallSpeed) {
+        ballDX = (ballDX / currentSpeed) * maxBallSpeed;
+        ballDY = (ballDY / currentSpeed) * maxBallSpeed;
+      }
+      
+      // Ensure ball doesn't get stuck moving horizontally
+      if (abs(ballDY) < 0.2) {
+        if (ballDY > 0) ballDY = 0.2;
+        else ballDY = -0.2;
+      }
+    }
+    
+    // Draw game state
+    u8g2.firstPage();
+    do {
+      // Draw bricks
+      for (int row = 0; row < brickRows; row++) {
+        for (int col = 0; col < brickCols; col++) {
+          if (bricks[row][col]) {
+            int brickX = col * (brickWidth + brickSpacing) + brickSpacing;
+            int brickY = row * (brickHeight + brickSpacing) + topMargin;
+            u8g2.drawFrame(brickX, brickY, brickWidth, brickHeight);
+          }
+        }
+      }
+      
+      // Draw paddle
+      u8g2.drawBox(paddleX, paddleY, paddleWidth, paddleHeight);
+      
+      // Draw ball
+      u8g2.drawDisc(int(ballX), int(ballY), ballSize);
+      
+      // Draw score
+      u8g2.setFont(u8g2_font_ncenB08_tr);
+      u8g2.setCursor(2, 8);
+      u8g2.print("Score:");
+      u8g2.print(score);
+      
+      // Draw level (moved up and shortened)
+      u8g2.setCursor(100, 8);
+      u8g2.print("L:");
+      u8g2.print(level);
+      
+    } while (u8g2.nextPage());
+    
+    // Small delay to prevent CPU overuse
+    delay(10);
+    
+    // Reset activity timer to prevent sleep during game
+    lastActivityTime = millis();
+  }
+  
+  // Return to menu
+  updateMenuDisplay();
+}
+
+// Snake game implementation
+void playSnake() {
+  u8g2.setPowerSave(0); // Ensure display is on
+  
+  // Game variables
+  bool gameRunning = true;
+  unsigned long lastMoveTime = 0;
+  const unsigned long initialMoveDelay = 150; // Snake movement speed (ms)
+  unsigned long moveDelay = initialMoveDelay;
+  
+  // Snake variables
+  const int maxSnakeLength = 100;
+  int snakeX[maxSnakeLength];
+  int snakeY[maxSnakeLength];
+  int snakeLength = 3;
+  int direction = 0; // 0: right, 1: down, 2: left, 3: up
+  
+  // Food variables
+  int foodX;
+  int foodY;
+  
+  // Game area
+  const int gameAreaX = 0;
+  const int gameAreaY = 10;
+  const int gameAreaWidth = 128;
+  const int gameAreaHeight = 54;
+  const int gridSize = 4; // Size of each snake segment
+  
+  // Score
+  int score = 0;
+  int highScore = getHighScore();
+  
+  // Nokia 3310 style controls
+  bool turnButtonPressed = false;
+  
+  // Initialize snake position (start in the middle)
+  for (int i = 0; i < snakeLength; i++) {
+    snakeX[i] = 64 - (i * gridSize);
+    snakeY[i] = 32;
+  }
+  
+  // Place initial food
+  placeFood:
+  foodX = random(gameAreaX + gridSize, gameAreaWidth - gridSize);
+  foodY = random(gameAreaY + gridSize, gameAreaHeight - gridSize);
+  // Ensure food is aligned to grid
+  foodX = foodX - (foodX % gridSize);
+  foodY = foodY - (foodY % gridSize);
+  
+  // Check if food is on snake
+  for (int i = 0; i < snakeLength; i++) {
+    if (abs(foodX - snakeX[i]) < gridSize && abs(foodY - snakeY[i]) < gridSize) {
+      goto placeFood; // Try again if food is on snake
+    }
+  }
+  
+  // Initialize game
+  u8g2.firstPage();
+  do {
+    u8g2.setFont(u8g2_font_ncenB10_tr);
+    u8g2.setCursor(40, 30);
+    u8g2.print("SNAKE");
+    u8g2.setFont(u8g2_font_ncenB08_tr);
+    u8g2.setCursor(15, 45);
+    u8g2.print("Press UP to start");
+    u8g2.setCursor(15, 55);
+    u8g2.print("High Score: ");
+    u8g2.print(highScore);
+  } while (u8g2.nextPage());
+  
+  // Wait for button press to start
+  while (true) {
+    uint16_t valUp = touchUp.measure();
+    if (valUp > TOUCH_THRESHOLD) {
+      break;
+    }
+    delay(10);
+  }
+  
+  // Wait for button release
+  while (true) {
+    uint16_t valUp = touchUp.measure();
+    if (valUp < TOUCH_THRESHOLD) {
+      break;
+    }
+    delay(10);
+  }
+  
+  // Show instructions for Nokia-style controls
+  u8g2.firstPage();
+  do {
+    u8g2.setFont(u8g2_font_ncenB08_tr);
+    u8g2.setCursor(5, 15);
+    u8g2.print("Nokia 3310 Controls:");
+    u8g2.setCursor(5, 30);
+    u8g2.print("UP: Turn left");
+    u8g2.setCursor(5, 40);
+    u8g2.print("DOWN: Turn right");
+    u8g2.setCursor(5, 50);
+    u8g2.print("POWER: Exit game");
+  } while (u8g2.nextPage());
+  
+  delay(2000); // Show instructions for 2 seconds
+  
+  // Main game loop
+  while (gameRunning) {
+    // Read button inputs
+    uint16_t valUp = touchUp.measure();
+    uint16_t valDown = touchDown.measure();
+    uint16_t valPower = touchPower.measure();
+    
+    bool upPressed = valUp > TOUCH_THRESHOLD;
+    bool downPressed = valDown > TOUCH_THRESHOLD;
+    bool powerPressed = valPower > TOUCH_THRESHOLD;
+    
+    // Handle Nokia 3310 style controls (only two buttons for turning)
+    if (upPressed && !turnButtonPressed) {
+      // Turn left (90 degrees counter-clockwise)
+      direction = (direction + 3) % 4;
+      turnButtonPressed = true;
+    } else if (downPressed && !turnButtonPressed) {
+      // Turn right (90 degrees clockwise)
+      direction = (direction + 1) % 4;
+      turnButtonPressed = true;
+    } else if (!upPressed && !downPressed) {
+      turnButtonPressed = false;
+    }
+    
+    if (powerPressed) {
+      // Exit game
+      gameRunning = false;
+    }
+    
+    // Update game state
+    if (millis() - lastMoveTime > moveDelay) {
+      lastMoveTime = millis();
+      
+      // Move snake body (follow the head)
+      for (int i = snakeLength - 1; i > 0; i--) {
+        snakeX[i] = snakeX[i - 1];
+        snakeY[i] = snakeY[i - 1];
+      }
+      
+      // Move snake head based on direction
+      switch (direction) {
+        case 0: // Right
+          snakeX[0] += gridSize;
+          break;
+        case 1: // Down
+          snakeY[0] += gridSize;
+          break;
+        case 2: // Left
+          snakeX[0] -= gridSize;
+          break;
+        case 3: // Up
+          snakeY[0] -= gridSize;
+          break;
+      }
+      
+      // Check for wall collision (wrap around)
+      if (snakeX[0] >= gameAreaWidth) {
+        snakeX[0] = gameAreaX;
+      } else if (snakeX[0] < gameAreaX) {
+        snakeX[0] = gameAreaWidth - gridSize;
+      }
+      
+      if (snakeY[0] >= gameAreaHeight) {
+        snakeY[0] = gameAreaY;
+      } else if (snakeY[0] < gameAreaY) {
+        snakeY[0] = gameAreaHeight - gridSize;
+      }
+      
+      // Check for self collision
+      for (int i = 1; i < snakeLength; i++) {
+        if (abs(snakeX[0] - snakeX[i]) < gridSize/2 && abs(snakeY[0] - snakeY[i]) < gridSize/2) {
+          // Game over
+          if (score > highScore) {
+            highScore = score;
+            saveHighScore(highScore);
+            
+            // Show new high score message
+            u8g2.firstPage();
+            do {
+              u8g2.setFont(u8g2_font_ncenB10_tr);
+              u8g2.setCursor(15, 25);
+              u8g2.print("NEW HIGH SCORE!");
+              u8g2.setFont(u8g2_font_ncenB08_tr);
+              u8g2.setCursor(35, 40);
+              u8g2.print("Score: ");
+              u8g2.print(score);
+            } while (u8g2.nextPage());
+            
+            delay(2000);
+          }
+          
+          // Show game over screen
+          u8g2.firstPage();
+          do {
+            u8g2.setFont(u8g2_font_ncenB10_tr);
+            u8g2.setCursor(25, 25);
+            u8g2.print("GAME OVER");
+            u8g2.setFont(u8g2_font_ncenB08_tr);
+            u8g2.setCursor(25, 40);
+            u8g2.print("Score: ");
+            u8g2.print(score);
+            u8g2.setCursor(25, 50);
+            u8g2.print("High: ");
+            u8g2.print(highScore);
+          } while (u8g2.nextPage());
+          
+          delay(2000);
+          gameRunning = false;
+          goto endGame; // Exit the game loop
+        }
+      }
+      
+      // Check for food collision
+      if (abs(snakeX[0] - foodX) < gridSize && abs(snakeY[0] - foodY) < gridSize) {
+        // Grow snake
+        if (snakeLength < maxSnakeLength) {
+          snakeLength++;
+        }
+        
+        // Increase score
+        score += 10;
+        
+        // Increase speed (decrease delay)
+        if (moveDelay > 50) {
+          moveDelay -= 5;
+        }
+        
+        // Place new food
+        placeNewFood:
+        foodX = random(gameAreaX + gridSize, gameAreaWidth - gridSize);
+        foodY = random(gameAreaY + gridSize, gameAreaHeight - gridSize);
+        // Ensure food is aligned to grid
+        foodX = foodX - (foodX % gridSize);
+        foodY = foodY - (foodY % gridSize);
+        
+        // Check if food is on snake
+        for (int i = 0; i < snakeLength; i++) {
+          if (abs(foodX - snakeX[i]) < gridSize && abs(foodY - snakeY[i]) < gridSize) {
+            goto placeNewFood; // Try again if food is on snake
+          }
+        }
+      }
+    }
+    
+    // Draw game state
+    u8g2.firstPage();
+    do {
+      // Draw border
+      u8g2.drawFrame(gameAreaX, gameAreaY, gameAreaWidth, gameAreaHeight);
+      
+      // Draw snake
+      for (int i = 0; i < snakeLength; i++) {
+        if (i == 0) {
+          // Draw head as filled square
+          u8g2.drawBox(snakeX[i], snakeY[i], gridSize, gridSize);
+        } else {
+          // Draw body as outlined square
+          u8g2.drawFrame(snakeX[i], snakeY[i], gridSize, gridSize);
+        }
+      }
+      
+      // Draw food
+      u8g2.drawDisc(foodX + gridSize/2, foodY + gridSize/2, gridSize/2);
+      
+      // Draw score
+      u8g2.setFont(u8g2_font_ncenB08_tr);
+      u8g2.setCursor(2, 8);
+      u8g2.print("Score:");
+      u8g2.print(score);
+      
+    } while (u8g2.nextPage());
+    
+    // Small delay to prevent CPU overuse
+    delay(10);
+    
+    // Reset activity timer to prevent sleep during game
+    lastActivityTime = millis();
+  }
+  
+  endGame:
+  // Return to menu
+  updateMenuDisplay();
+}
+
+// Print the logo as ASCII art to the serial monitor for visualization
+void printLogoAsAscii() {
+  Serial.println("Logo as ASCII art:");
+  Serial.println("----------------------------------------");
+  
+  for (int y = 0; y < 30; y++) {
+    for (int x = 0; x < 128; x++) {
+      int byteIndex = y * 16 + (x / 8);
+      int bitIndex = 7 - (x % 8);
+      
+      bool pixelSet = pgm_read_byte(&bzcard_logo[byteIndex]) & (1 << bitIndex);
+      
+      if (pixelSet) {
+        Serial.print("#");  // # character for 1 (black pixel)
+      } else {
+        Serial.print(" ");  // White space for 0 (white pixel)
+      }
+    }
+    Serial.println();
+  }
+  
+  Serial.println("----------------------------------------");
+}
