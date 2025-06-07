@@ -42,6 +42,10 @@ const int8_t PIECES_I[2][2][4] = {
 } // namespace
 
 void Tetris::play() {
+codex/fix-interactive-names-and-tetris-logo-issue
+
+codex/fix-interactive-names-and-tetris-logo-issue
+main
     displayManager.u8g2.setPowerSave(0);
 
     bool grid[10][18]{};
@@ -204,6 +208,34 @@ void Tetris::play() {
         delay(10);
     }
     while(inputManager.anyButtonPressed()){
+    codex/fix-interactive-names-and-tetris-logo-issue
+
+
+    displayManager.u8g2.firstPage();
+    do {
+        displayManager.u8g2.setFont(u8g2_font_profont17_tr);
+        int w = displayManager.u8g2.getStrWidth("TETRIS");
+        displayManager.u8g2.drawStr((128 - w) / 2, 30, "TETRIS");
+        displayManager.u8g2.setFont(u8g2_font_6x10_tr);
+        displayManager.u8g2.drawStr(22, 50, "Not implemented");
+    } while (displayManager.u8g2.nextPage());
+
+    // Wait for the game-launching button to be released
+    while (inputManager.anyButtonPressed()) {
+        inputManager.update();
+        delay(10);
+    }
+
+    // Wait for a new button press to exit the placeholder screen
+    while (!inputManager.anyButtonPressed()) {
+    main
+        inputManager.update();
+        delay(10);
+    }
+
+    // Wait for release before returning to the menu
+    while (inputManager.anyButtonPressed()) {
+    main
         inputManager.update();
         delay(10);
     }
