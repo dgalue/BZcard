@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include "DisplayManager.h"
 
 // Use original working U8g2 software SPI constructor and pin mapping
