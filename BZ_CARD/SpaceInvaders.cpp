@@ -14,7 +14,20 @@ void SpaceInvaders::play() {
         displayManager.u8g2.drawStr(22, 50, "Not implemented");
     } while (displayManager.u8g2.nextPage());
 
+    // Wait for the launch button to be released
+    while (inputManager.anyButtonPressed()) {
+        inputManager.update();
+        delay(10);
+    }
+
+    // Wait for a new button press before exiting
     while (!inputManager.anyButtonPressed()) {
+        inputManager.update();
+        delay(10);
+    }
+
+    // Wait for release so the menu doesn't immediately re-trigger
+    while (inputManager.anyButtonPressed()) {
         inputManager.update();
         delay(10);
     }
