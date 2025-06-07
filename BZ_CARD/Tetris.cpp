@@ -42,6 +42,8 @@ const int8_t PIECES_I[2][2][4] = {
 } // namespace
 
 void Tetris::play() {
+7c8fj7-codex/fix-interactive-names-and-tetris-logo-issue
+
 codex/fix-interactive-names-and-tetris-logo-issue
 
 codex/fix-interactive-names-and-tetris-logo-issue
@@ -208,6 +210,8 @@ main
         delay(10);
     }
     while(inputManager.anyButtonPressed()){
+7c8fj7-codex/fix-interactive-names-and-tetris-logo-issue
+
     codex/fix-interactive-names-and-tetris-logo-issue
 
 
