@@ -450,8 +450,8 @@
           "category": "Contributed",
           "url": "https://github.com/willow2ko/BZcard/raw/main/BZcard-2.0.zip",
           "archiveFileName": "BZcard-2.0.zip",
-          "checksum": "SHA-256:628dbaa11962dd09dea447be7f8d5441b4446e6c0290ed4f89cdeafd189a87a6",
-          "size": "4741963",
+          "checksum": "SHA-256:2da0f8f1f612a29f0cc32e89c1bf94ff61cf49efb2129523842ced5b6cce4d6b",
+          "size": "4741858",
           "help": {
             "online": "https://www.arduino.cc/en/Reference/HomePage"
           },
